@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <form id="login-form">
+      <input id="user" type="text" />
+      <input id="pass" type="password" />
+      <button id="submit" type="submit">Submit</button>
+    </form>
+    <script>
+      window.submitClicks = 0;
+      document.getElementById("submit").addEventListener("click", function (event) {
+        event.preventDefault();
+        window.submitClicks += 1;
+      });
+    </script>
+  </body>
+</html>
+

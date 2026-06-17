@@ -1,0 +1,66 @@
+{
+  "name": "auto-login",
+  "version": "0.1.0",
+  "description": "Auto Login is a secure orchestration console for high-volume web access workflows.",
+  "author": "Codex",
+  "private": true,
+  "type": "module",
+  "main": "src/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "vite": "vite",
+    "start": "electron .",
+    "build": "vite build",
+    "pack:win": "npm run build && electron-builder.cmd --win dir nsis portable",
+    "pack:win:dir": "npm run build && electron-builder.cmd --win dir",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.5.1",
+    "electron": "^36.9.5",
+    "electron-builder": "^25.1.8",
+    "jsdom": "^26.1.0",
+    "vite": "^6.3.5"
+  },
+  "build": {
+    "appId": "com.autologin.desktop",
+    "productName": "Auto Login",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": false,
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "src/preload/**/*",
+      "src/shared/**/*",
+      "package.json"
+    ],
+    "win": {
+      "sign": false,
+      "signAndEditExecutable": false,
+      "target": [
+        "dir",
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "Auto Login Setup-${version}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Auto Login"
+    },
+    "portable": {
+      "artifactName": "Auto Login Portable-${version}.${ext}"
+    }
+  }
+}
