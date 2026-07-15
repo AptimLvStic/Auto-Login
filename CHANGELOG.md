@@ -10,6 +10,7 @@
 
 - 完善本地桌面应用的安全边界、质量门禁与发布流程。
 - 升级 Electron 至 43.1.0、electron-builder 至 26.15.3。
+- Windows 打包交由 GitHub Actions 发布步骤上传，避免构建阶段重复发布。
 
 ### Security
 

@@ -17,7 +17,7 @@
     "build": "vite build",
     "playwright:login": "node scripts/playwright-login.mjs",
     "playwright:login:example": "node scripts/playwright-login.mjs --config scripts/playwright-login.example.json",
-    "pack:win": "npm run build && electron-builder.cmd --win dir nsis portable",
+    "pack:win": "npm run build && electron-builder.cmd --win dir nsis portable --publish never",
     "pack:win:dir": "npm run build && electron-builder.cmd --win dir",
     "test": "node --test"
   },
