@@ -6,6 +6,7 @@ import { APP_CONFIG } from "./app/appConfig.js";
 import { createDatabase } from "./database.js";
 import { getExcelPreview, parseExcelFile } from "./excel.js";
 import { createLoginScript, toLaunchResult } from "./loginAutomation.js";
+import { resolveRendererUrl } from "./rendererUrl.js";
 import { createSecurityService } from "./security.js";
 import { DEFAULT_SETTINGS, LOGIN_RESULT, normalizeUrlValue } from "../shared/site.js";
 import { normalizeExternalUrl, normalizeSettings, normalizeSiteIds } from "./securityPolicy.js";
@@ -25,14 +26,6 @@ let mainWindow;
 let database;
 let security;
 const loginWindows = new Set();
-
-function getRendererUrl() {
-  if (process.env.VITE_DEV_SERVER_URL) {
-    return process.env.VITE_DEV_SERVER_URL;
-  }
-
-  return `file://${path.join(__dirname, "../../dist/index.html")}`;
-}
 
 function getTemplateRows() {
   return [
@@ -181,7 +174,12 @@ function createMainWindow() {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-  mainWindow.loadURL(getRendererUrl());
+  mainWindow.loadURL(resolveRendererUrl(__dirname)).catch((error) => {
+    dialog.showErrorBox(
+      "应用界面加载失败",
+      `无法加载本地界面资源。请重新安装应用或联系维护者。\n\n${error.message}`
+    );
+  });
 }
 
 async function importExcel(filePath, mapping) {
