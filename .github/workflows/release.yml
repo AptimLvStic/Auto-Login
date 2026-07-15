@@ -25,8 +25,11 @@ jobs:
       - run: npm audit --audit-level=high
       - name: Scan for committed secrets
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $release = Invoke-RestMethod "https://api.github.com/repos/gitleaks/gitleaks/releases/latest"
+          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = "application/vnd.github+json" }
+          $release = Invoke-RestMethod "https://api.github.com/repos/gitleaks/gitleaks/releases/latest" -Headers $headers
           $asset = $release.assets | Where-Object { $_.name -match "_windows_x64\.zip$" } | Select-Object -First 1
           if (-not $asset) { throw "No Windows x64 Gitleaks asset was found." }
           Invoke-WebRequest $asset.browser_download_url -OutFile gitleaks.zip
