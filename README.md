@@ -147,8 +147,8 @@ Example config:
 After `npm run pack:win`, the main outputs are generated in `release`:
 
 - `win-unpacked/`: directory edition
-- `Auto Login Setup-0.1.0.exe`: installer edition
-- `Auto Login Portable-0.1.0.exe`: portable edition
+- `Auto Login Setup-<version>.exe`: installer edition
+- `Auto Login Portable-<version>.exe`: portable edition
 
 Generated installers are intentionally ignored by Git. Publish them through a version tag (`vX.Y.Z`): GitHub Actions validates lint, tests, build, production dependency audit and secret scanning, then creates a GitHub Release from the Windows artifacts.
 
