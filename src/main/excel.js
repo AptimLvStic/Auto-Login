@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import xlsx from "xlsx";
+import ExcelJS from "exceljs";
 import {
   IMPORT_FIELDS,
   REQUIRED_IMPORT_FIELD_KEYS,
@@ -7,31 +7,51 @@ import {
   getMissingMappings,
   normalizeUrlValue
 } from "../shared/site.js";
+import { normalizeExternalUrl } from "./securityPolicy.js";
 
 function isValidUrl(value) {
   try {
-    normalizeUrlValue(value);
+    normalizeExternalUrl(value);
     return true;
   } catch {
     return false;
   }
 }
 
-function getWorkbookRows(filePath) {
+async function getWorkbookRows(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Excel file not found: ${filePath}`);
   }
 
-  const workbook = xlsx.readFile(filePath);
-  const firstSheetName = workbook.SheetNames[0];
-  const firstSheet = workbook.Sheets[firstSheetName];
-  const rows = xlsx.utils.sheet_to_json(firstSheet, {
-    defval: "",
-    raw: false
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    throw new Error("Excel file does not contain a worksheet.");
+  }
+
+  const headers = [];
+  worksheet.getRow(1).eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+    headers[columnNumber] = String(cell.text ?? "").trim();
+  });
+
+  const rows = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) {
+      return;
+    }
+
+    const value = {};
+    headers.forEach((header, columnNumber) => {
+      if (columnNumber > 0 && header) {
+        value[header] = String(row.getCell(columnNumber).text ?? "").trim();
+      }
+    });
+    rows.push(value);
   });
 
   return {
-    sheetName: firstSheetName,
+    sheetName: worksheet.name,
     rows
   };
 }
@@ -105,8 +125,8 @@ export function normalizeImportedRow(row, rowNumber, mapping) {
   };
 }
 
-export function getExcelPreview(filePath) {
-  const { rows, sheetName } = getWorkbookRows(filePath);
+export async function getExcelPreview(filePath) {
+  const { rows, sheetName } = await getWorkbookRows(filePath);
   const headers = Object.keys(rows[0] ?? {});
   const sampleRows = rows.slice(0, 5);
 
@@ -121,7 +141,7 @@ export function getExcelPreview(filePath) {
   };
 }
 
-export function parseExcelFile(filePath, mapping) {
+export async function parseExcelFile(filePath, mapping) {
   const mappingValidation = validateFieldMapping(mapping);
   if (!mappingValidation.valid) {
     return {
@@ -137,7 +157,7 @@ export function parseExcelFile(filePath, mapping) {
     };
   }
 
-  const { rows } = getWorkbookRows(filePath);
+  const { rows } = await getWorkbookRows(filePath);
   const validRows = [];
   const errors = [];
 

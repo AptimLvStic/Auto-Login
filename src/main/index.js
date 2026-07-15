@@ -1,16 +1,13 @@
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import electron from "electron";
-import xlsx from "xlsx";
+import ExcelJS from "exceljs";
 import { APP_CONFIG } from "./app/appConfig.js";
 import { createDatabase } from "./database.js";
 import { getExcelPreview, parseExcelFile } from "./excel.js";
 import { createSecurityService } from "./security.js";
 import { DEFAULT_SETTINGS, LOGIN_RESULT, normalizeUrlValue } from "../shared/site.js";
-
-const execFileAsync = promisify(execFile);
+import { normalizeExternalUrl, normalizeSettings, normalizeSiteIds } from "./securityPolicy.js";
 
 const {
   app,
@@ -65,11 +62,15 @@ function getTemplateRows() {
   ];
 }
 
-function writeWorkbook(filePath, rows) {
-  const workbook = xlsx.utils.book_new();
-  const sheet = xlsx.utils.json_to_sheet(rows);
-  xlsx.utils.book_append_sheet(workbook, sheet, "Sites");
-  xlsx.writeFile(workbook, filePath);
+async function writeWorkbook(filePath, rows) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Sites");
+  const headers = Object.keys(rows[0] ?? {});
+  sheet.columns = headers.map((key) => ({ header: key, key, width: Math.min(42, Math.max(14, key.length + 4)) }));
+  sheet.addRows(rows);
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  await workbook.xlsx.writeFile(filePath);
 }
 
 function normalizeSitePayload(payload) {
@@ -126,10 +127,10 @@ function validateSitePayload(payload, existingRecord) {
   }
 
   try {
-    normalizeUrlValue(payload.siteUrl);
-    normalizeUrlValue(payload.loginUrl);
+    normalizeExternalUrl(payload.siteUrl);
+    normalizeExternalUrl(payload.loginUrl);
   } catch {
-    const error = new Error("站点地址和登录页地址必须是有效的 URL");
+    const error = new Error("站点地址和登录页地址必须是有效的 HTTP 或 HTTPS URL");
     error.code = "VALIDATION_ERROR";
     throw error;
   }
@@ -149,6 +150,16 @@ function applyWindowSettings(window, settings) {
   window.webContents.setZoomFactor(zoomFactor);
 }
 
+function handleIpc(channel, handler) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+      throw new Error("已拒绝来自未受信任窗口的请求。");
+    }
+
+    return handler(...args);
+  });
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -161,16 +172,19 @@ function createMainWindow() {
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
-      sandbox: false
+      sandbox: true
     }
   });
 
   applyWindowSettings(mainWindow, database?.getSettings?.() ?? DEFAULT_SETTINGS);
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   mainWindow.loadURL(getRendererUrl());
 }
 
 async function importExcel(filePath, mapping) {
-  const parsed = parseExcelFile(filePath, mapping);
+  const parsed = await parseExcelFile(filePath, mapping);
   if (parsed.validRows.length > 0) {
     const records = parsed.validRows.map((row) => ({
       siteName: row.siteName,
@@ -195,18 +209,9 @@ async function importExcel(filePath, mapping) {
 }
 
 async function openUrlsInDefaultBrowser(urls) {
-  const normalizedUrls = urls.map((url) => normalizeUrlValue(url));
+  const normalizedUrls = urls.map((url) => normalizeExternalUrl(url));
   if (normalizedUrls.length === 0) {
     return;
-  }
-
-  if (process.platform === "win32") {
-    try {
-      await execFileAsync("cmd", ["/c", "start", "", ...normalizedUrls], { windowsHide: true });
-      return;
-    } catch {
-      // Fall through to shell.openExternal.
-    }
   }
 
   for (const url of normalizedUrls) {
@@ -261,7 +266,8 @@ async function launchLogin(siteId) {
 }
 
 async function launchSites(siteIds) {
-  const records = siteIds
+  const normalizedSiteIds = normalizeSiteIds(siteIds);
+  const records = normalizedSiteIds
     .map((siteId) => ({ siteId, record: database.getSiteById(siteId) }))
     .filter((item) => item.record);
 
@@ -322,7 +328,7 @@ async function exportSitesToExcel() {
     last_used_at: site.lastUsedAt ?? ""
   }));
 
-  writeWorkbook(result.filePath, rows);
+  await writeWorkbook(result.filePath, rows);
   return result.filePath;
 }
 
@@ -342,7 +348,7 @@ async function downloadTemplateWorkbook() {
     return null;
   }
 
-  writeWorkbook(result.filePath, getTemplateRows());
+  await writeWorkbook(result.filePath, getTemplateRows());
   return result.filePath;
 }
 
@@ -355,7 +361,7 @@ app.whenReady().then(() => {
     vaultStoragePath: path.join(app.getPath("userData"), "password-vault-hint.json")
   });
 
-  ipcMain.handle("app:getMeta", () => ({
+  handleIpc("app:getMeta", () => ({
     appName: APP_CONFIG.name,
     appDescription: APP_CONFIG.description,
     dbPath: database.dbPath,
@@ -364,14 +370,10 @@ app.whenReady().then(() => {
     userDataPath: app.getPath("userData")
   }));
 
-  ipcMain.handle("app:getSettings", () => database.getSettings());
+  handleIpc("app:getSettings", () => database.getSettings());
 
-  ipcMain.handle("app:saveSettings", (_event, settings) => {
-    const normalized = {
-      zoomLevel: Number(settings.zoomLevel ?? DEFAULT_SETTINGS.zoomLevel),
-      fontScale: Number(settings.fontScale ?? DEFAULT_SETTINGS.fontScale),
-      themeMode: settings.themeMode ?? DEFAULT_SETTINGS.themeMode
-    };
+  handleIpc("app:saveSettings", (settings) => {
+    const normalized = normalizeSettings(settings, DEFAULT_SETTINGS);
 
     const saved = database.saveSettings(normalized);
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -380,16 +382,16 @@ app.whenReady().then(() => {
     return saved;
   });
 
-  ipcMain.handle("app:getPasswordVaultMeta", () => ({
+  handleIpc("app:getPasswordVaultMeta", () => ({
     mode: security.encryptionMode,
     managedBy: "local-system-keyring",
     note: "密码仅在当前设备环境下加密保存，用于本地受控访问。"
   }));
 
-  ipcMain.handle("sites:list", () => database.listSites());
-  ipcMain.handle("groups:list", () => database.listGroups());
+  handleIpc("sites:list", () => database.listSites());
+  handleIpc("groups:list", () => database.listGroups());
 
-  ipcMain.handle("groups:save", (_event, payload) => {
+  handleIpc("groups:save", (payload) => {
     const normalized = {
       id: String(payload.id ?? "").trim(),
       name: String(payload.name ?? "").trim(),
@@ -399,23 +401,23 @@ app.whenReady().then(() => {
     return { id: database.saveGroup(normalized) };
   });
 
-  ipcMain.handle("groups:delete", (_event, groupName) => {
+  handleIpc("groups:delete", (groupName) => {
     database.deleteGroup(groupName);
     return { success: true };
   });
 
-  ipcMain.handle("groups:moveSites", (_event, siteIds, groupName) => {
-    database.moveSitesToGroup(siteIds, groupName);
+  handleIpc("groups:moveSites", (siteIds, groupName) => {
+    database.moveSitesToGroup(normalizeSiteIds(siteIds), groupName);
     return { success: true };
   });
 
-  ipcMain.handle("sites:pickExcelFile", async () => {
+  handleIpc("sites:pickExcelFile", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
       filters: [
         {
           name: "Excel",
-          extensions: ["xlsx", "xls"]
+          extensions: ["xlsx"]
         }
       ]
     });
@@ -427,12 +429,12 @@ app.whenReady().then(() => {
     return result.filePaths[0];
   });
 
-  ipcMain.handle("sites:downloadTemplate", async () => downloadTemplateWorkbook());
-  ipcMain.handle("sites:exportExcel", async () => exportSitesToExcel());
-  ipcMain.handle("sites:getExcelPreview", async (_event, filePath) => getExcelPreview(filePath));
-  ipcMain.handle("sites:importExcel", async (_event, filePath, mapping) => importExcel(filePath, mapping));
+  handleIpc("sites:downloadTemplate", async () => downloadTemplateWorkbook());
+  handleIpc("sites:exportExcel", async () => exportSitesToExcel());
+  handleIpc("sites:getExcelPreview", async (filePath) => getExcelPreview(filePath));
+  handleIpc("sites:importExcel", async (filePath, mapping) => importExcel(filePath, mapping));
 
-  ipcMain.handle("sites:save", async (_event, payload) => {
+  handleIpc("sites:save", async (payload) => {
     const existingRecord = payload.id ? database.getSiteById(payload.id) : null;
     const normalizedPayload = normalizeSitePayload(payload);
     validateSitePayload(normalizedPayload, existingRecord);
@@ -451,13 +453,13 @@ app.whenReady().then(() => {
     return { id };
   });
 
-  ipcMain.handle("sites:delete", async (_event, siteId) => {
+  handleIpc("sites:delete", async (siteId) => {
     database.deleteSite(siteId);
     return { success: true };
   });
 
-  ipcMain.handle("sites:launchLogin", async (_event, siteId) => launchLogin(siteId));
-  ipcMain.handle("sites:launchBatch", async (_event, siteIds) => launchSites(siteIds));
+  handleIpc("sites:launchLogin", async (siteId) => launchLogin(siteId));
+  handleIpc("sites:launchBatch", async (siteIds) => launchSites(siteIds));
 
   createMainWindow();
 

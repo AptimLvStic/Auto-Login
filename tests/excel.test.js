@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import xlsx from "xlsx";
+import ExcelJS from "exceljs";
 import {
   getExcelPreview,
   normalizeImportedRow,
@@ -83,11 +83,47 @@ test("normalizeImportedRow auto-fills protocol and missing login URL", () => {
   assert.equal(result.normalized.loginUrl, "https://portal.example.com/");
 });
 
-test("getExcelPreview returns headers and suggested mapping", () => {
+test("normalizeImportedRow rejects unsupported URL protocols", () => {
+  const result = normalizeImportedRow(
+    {
+      "系统名称": "Legacy FTP",
+      "入口地址": "ftp://example.com",
+      "登录账户": "alice",
+      "登录密码": "not-a-real-password",
+      "登录页面": "ftp://example.com/login",
+      "账号框": "#user",
+      "密码框": "#pass",
+      "按钮": "#submit"
+    },
+    2,
+    {
+      siteName: "系统名称",
+      siteUrl: "入口地址",
+      username: "登录账户",
+      password: "登录密码",
+      loginUrl: "登录页面",
+      usernameSelector: "账号框",
+      passwordSelector: "密码框",
+      submitSelector: "按钮"
+    }
+  );
+
+  assert.match(result.errors.join("；"), /有效 URL/);
+});
+
+async function writeWorkbook(filePath, rows) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Sites");
+  const headers = Object.keys(rows[0]);
+  sheet.columns = headers.map((key) => ({ header: key, key }));
+  sheet.addRows(rows);
+  await workbook.xlsx.writeFile(filePath);
+}
+
+test("getExcelPreview returns headers and suggested mapping", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "site-launcher-preview-"));
   const filePath = path.join(tempDir, "preview.xlsx");
-  const workbook = xlsx.utils.book_new();
-  const sheet = xlsx.utils.json_to_sheet([
+  await writeWorkbook(filePath, [
     {
       site_name: "Portal A",
       site_url: "https://example.com",
@@ -100,20 +136,17 @@ test("getExcelPreview returns headers and suggested mapping", () => {
       notes: "primary"
     }
   ]);
-  xlsx.utils.book_append_sheet(workbook, sheet, "Sites");
-  xlsx.writeFile(workbook, filePath);
 
-  const result = getExcelPreview(filePath);
+  const result = await getExcelPreview(filePath);
   assert.equal(result.headers.includes("site_name"), true);
   assert.equal(result.suggestedMapping.siteName, "site_name");
   assert.equal(result.totalRows, 1);
 });
 
-test("parseExcelFile imports rows with custom mapping and returns row errors", () => {
+test("parseExcelFile imports rows with custom mapping and returns row errors", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "site-launcher-"));
   const filePath = path.join(tempDir, "sites.xlsx");
-  const workbook = xlsx.utils.book_new();
-  const sheet = xlsx.utils.json_to_sheet([
+  await writeWorkbook(filePath, [
     {
       "系统名称": "Portal A",
       "入口地址": "https://example.com",
@@ -137,10 +170,8 @@ test("parseExcelFile imports rows with custom mapping and returns row errors", (
       "说明": ""
     }
   ]);
-  xlsx.utils.book_append_sheet(workbook, sheet, "Sites");
-  xlsx.writeFile(workbook, filePath);
 
-  const result = parseExcelFile(filePath, {
+  const result = await parseExcelFile(filePath, {
     siteName: "系统名称",
     siteUrl: "入口地址",
     username: "登录账户",

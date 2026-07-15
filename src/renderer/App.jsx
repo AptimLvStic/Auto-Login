@@ -570,11 +570,9 @@ function ImportPanel({ onImported }) {
 function SiteList({
   sites,
   groups,
-  groupCounts,
   search,
   setSearch,
   groupFilter,
-  setGroupFilter,
   pageSize,
   setPageSize,
   currentPage,
@@ -1148,23 +1146,30 @@ export default function App() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [appMeta, setAppMeta] = useState(null);
   const [vaultMeta, setVaultMeta] = useState(null);
-
-  async function loadSites() {
-    const nextSites = await window.siteLauncherApi.listSites();
-    setSites(nextSites);
-  }
-
-  async function loadGroups() {
-    const nextGroups = await window.siteLauncherApi.listGroups();
-    setGroups(nextGroups);
-  }
+  const [directoryError, setDirectoryError] = useState("");
 
   useEffect(() => {
-    loadSites();
-    loadGroups();
-    window.siteLauncherApi.getSettings().then(setSettings);
-    window.siteLauncherApi.getMeta().then(setAppMeta);
-    window.siteLauncherApi.getPasswordVaultMeta().then(setVaultMeta);
+    void refreshDirectoryData();
+
+    Promise.allSettled([
+      window.siteLauncherApi.getSettings(),
+      window.siteLauncherApi.getMeta(),
+      window.siteLauncherApi.getPasswordVaultMeta()
+    ]).then(([settingsResult, metaResult, vaultResult]) => {
+      if (settingsResult.status === "fulfilled") {
+        setSettings(settingsResult.value);
+      }
+      if (metaResult.status === "fulfilled") {
+        setAppMeta(metaResult.value);
+      }
+      if (vaultResult.status === "fulfilled") {
+        setVaultMeta(vaultResult.value);
+      }
+
+      if ([settingsResult, metaResult, vaultResult].some((result) => result.status === "rejected")) {
+        setDirectoryError("部分应用配置加载失败，请重试或重新打开应用。");
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -1200,7 +1205,19 @@ export default function App() {
   );
 
   async function refreshDirectoryData() {
-    await Promise.all([loadSites(), loadGroups()]);
+    try {
+      const [nextSites, nextGroups] = await Promise.all([
+        window.siteLauncherApi.listSites(),
+        window.siteLauncherApi.listGroups()
+      ]);
+      setSites(nextSites);
+      setGroups(nextGroups);
+      setDirectoryError("");
+      return true;
+    } catch (error) {
+      setDirectoryError(error?.message || "站点数据加载失败，请重试或重新打开应用。");
+      return false;
+    }
   }
 
   async function handleSaveSite() {
@@ -1270,41 +1287,63 @@ export default function App() {
   }
 
   async function handleDeleteSite(siteId) {
-    await window.siteLauncherApi.deleteSite(siteId);
-    await refreshDirectoryData();
+    try {
+      await window.siteLauncherApi.deleteSite(siteId);
+      await refreshDirectoryData();
+      setLaunchResult({ status: "success", message: "站点已删除。" });
+    } catch (error) {
+      setLaunchResult({ status: "unknown_error", message: error?.message || "删除站点失败。" });
+    }
   }
 
   async function handleDeleteGroup(groupName) {
-    await window.siteLauncherApi.deleteGroup(groupName);
-    if (groupFilter === groupName) {
-      setGroupFilter("");
+    try {
+      await window.siteLauncherApi.deleteGroup(groupName);
+      if (groupFilter === groupName) {
+        setGroupFilter("");
+      }
+      await refreshDirectoryData();
+      setLaunchResult({ status: "success", message: "分组已删除，原分组站点已移动到未分组。" });
+    } catch (error) {
+      setLaunchResult({ status: "unknown_error", message: error?.message || "删除分组失败。" });
     }
-    await refreshDirectoryData();
   }
 
   async function handleMoveSites(siteIds, groupName) {
-    await window.siteLauncherApi.moveSitesToGroup(siteIds, groupName);
-    await refreshDirectoryData();
-    setLaunchResult({
-      status: "success",
-      message: `已将 ${siteIds.length} 个站点移动到${groupName || "未分组"}。`
-    });
+    try {
+      await window.siteLauncherApi.moveSitesToGroup(siteIds, groupName);
+      await refreshDirectoryData();
+      setLaunchResult({
+        status: "success",
+        message: `已将 ${siteIds.length} 个站点移动到${groupName || "未分组"}。`
+      });
+    } catch (error) {
+      setLaunchResult({ status: "unknown_error", message: error?.message || "批量移动站点失败。" });
+    }
   }
 
   async function handleLaunch(siteId) {
-    const result = await window.siteLauncherApi.launchLogin(siteId);
-    setLaunchResult(result);
-    await loadSites();
+    try {
+      const result = await window.siteLauncherApi.launchLogin(siteId);
+      setLaunchResult(result);
+      await refreshDirectoryData();
+    } catch (error) {
+      setLaunchResult({ status: "unknown_error", message: error?.message || "打开登录页失败。" });
+    }
   }
 
   async function handleLaunchBatch(siteIds, groupLabel) {
-    const results = await window.siteLauncherApi.launchBatch(siteIds);
-    const successCount = results.filter((item) => item.status === "success").length;
-    setLaunchResult({
-      status: successCount === results.length ? "success" : "unknown_error",
-      message: `${groupLabel} 已批量打开 ${results.length} 个站点，成功 ${successCount} 个。`
-    });
-    await loadSites();
+    try {
+      const results = await window.siteLauncherApi.launchBatch(siteIds);
+      const successCount = results.filter((item) => item.status === "success").length;
+      setLaunchResult({
+        status: successCount === results.length ? "success" : "unknown_error",
+        message: `${groupLabel} 已批量打开 ${results.length} 个站点，成功 ${successCount} 个。`
+      });
+      await refreshDirectoryData();
+    } catch (error) {
+      setLaunchResult({ status: "unknown_error", message: error?.message || "批量打开站点失败。" });
+    }
   }
 
   async function handleExport() {
@@ -1322,6 +1361,8 @@ export default function App() {
     try {
       const saved = await window.siteLauncherApi.saveSettings(settings);
       setSettings(saved);
+    } catch (error) {
+      setDirectoryError(error?.message || "保存界面设置失败。");
     } finally {
       setSavingSettings(false);
     }
@@ -1379,6 +1420,16 @@ export default function App() {
       />
 
       <main className="content-area">
+        {directoryError ? (
+          <div className="status-banner status-unknown_error app-error-banner">
+            <strong>加载或操作失败</strong>
+            <span>{directoryError}</span>
+            <button type="button" className="secondary-button" onClick={() => void refreshDirectoryData()}>
+              重试
+            </button>
+          </div>
+        ) : null}
+
         {activeView === "list" ? (
           <SiteList
             sites={sites}

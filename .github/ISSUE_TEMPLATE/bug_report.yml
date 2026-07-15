@@ -1,0 +1,26 @@
+name: 缺陷报告
+description: 报告可复现的功能问题（请勿提交敏感信息）
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿填写真实账号、密码、Token、本地数据库或任何可识别个人信息。安全问题请遵循 SECURITY.md 私密报告。"
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与操作系统
+    validations:
+      required: true

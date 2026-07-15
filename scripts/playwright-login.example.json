@@ -1,0 +1,20 @@
+{
+  "browserName": "chromium",
+  "defaultTimeoutMs": 15000,
+  "submitWaitMs": 1500,
+  "screenshotOnSuccess": true,
+  "screenshotOnFailure": true,
+  "workflows": [
+    {
+      "name": "mock-login-fixture",
+      "loginUrl": "file:///C:/Users/15721/Documents/Codex/2026-06-15/web/tests/fixtures/mock-login.html",
+      "username": "alice",
+      "password": "secret",
+      "usernameSelector": "#user",
+      "passwordSelector": "#pass",
+      "submitSelector": "#submit",
+      "successMessage": "Mock login form submitted.",
+      "submitWaitMs": 500
+    }
+  ]
+}
