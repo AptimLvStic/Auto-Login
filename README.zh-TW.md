@@ -35,6 +35,34 @@ flowchart LR
 | Excel | ExcelJS |
 | 品質保證 | ESLint、Node.js Test Runner、GitHub Actions |
 
+## 目錄結構
+
+```text
+Auto-Login/
+├─ .github/
+│  ├─ ISSUE_TEMPLATE/              # Bug 與功能請求範本
+│  ├─ workflows/release.yml        # 驗證、密鑰掃描與 Windows 發行
+│  ├─ dependabot.yml
+│  └─ pull_request_template.md
+├─ scripts/                        # 開發及選用的 Playwright 工作流程指令碼
+├─ src/
+│  ├─ main/                        # Electron 主程序、SQLite、Excel 與安全策略
+│  │  ├─ app/                      # 應用程式中繼資料
+│  │  └─ services/passwordVault/   # 本機密碼庫輔助邏輯
+│  ├─ preload/                     # 受限 IPC 橋接層
+│  ├─ renderer/                    # React 介面與樣式
+│  └─ shared/                      # 跨程序共用規則與工具
+├─ tests/                          # Node.js 自動化測試與測試夾具
+├─ BUILDING.md                     # Windows 建置指南
+├─ CHANGELOG.md                    # 變更記錄
+├─ CONTRIBUTING.md                 # 貢獻指南
+├─ SECURITY.md                     # 安全策略
+├─ package.json                    # 指令、依賴與 electron-builder 設定
+└─ vite.config.js                  # Vite 設定
+```
+
+`node_modules/`、`dist/`、`release/`、本機資料庫及執行輸出都是本機產生檔案，已由 `.gitignore` 排除，不屬於原始碼目錄結構。
+
 ## 快速開始
 
 ### 環境需求

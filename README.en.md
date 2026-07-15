@@ -35,6 +35,34 @@ flowchart LR
 | Excel | ExcelJS |
 | Quality | ESLint, Node.js Test Runner, GitHub Actions |
 
+## Repository structure
+
+```text
+Auto-Login/
+├─ .github/
+│  ├─ ISSUE_TEMPLATE/              # Bug and feature-request templates
+│  ├─ workflows/release.yml        # Validation, secret scan, Windows release
+│  ├─ dependabot.yml
+│  └─ pull_request_template.md
+├─ scripts/                        # Development and optional Playwright scripts
+├─ src/
+│  ├─ main/                        # Electron main process, SQLite, Excel, security
+│  │  ├─ app/                      # Application metadata
+│  │  └─ services/passwordVault/   # Local password-vault helpers
+│  ├─ preload/                     # Restricted IPC bridge
+│  ├─ renderer/                    # React UI and styles
+│  └─ shared/                      # Cross-process rules and utilities
+├─ tests/                          # Node.js automated tests and fixtures
+├─ BUILDING.md                     # Windows build guide
+├─ CHANGELOG.md                    # Change history
+├─ CONTRIBUTING.md                 # Contribution guide
+├─ SECURITY.md                     # Security policy
+├─ package.json                    # Scripts, dependencies, electron-builder config
+└─ vite.config.js                  # Vite configuration
+```
+
+`node_modules/`, `dist/`, `release/`, local databases, and runtime output are generated locally and excluded by `.gitignore`; they are not source directories.
+
 ## Getting started
 
 ### Requirements
