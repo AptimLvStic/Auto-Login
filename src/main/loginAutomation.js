@@ -1,5 +1,34 @@
 export async function autoLogin(document, payload) {
   const EventConstructor = document.defaultView?.Event ?? Event;
+  const timeoutMs = Math.max(0, Number(payload.timeoutMs ?? 12000));
+  const pollIntervalMs = Math.max(25, Number(payload.pollIntervalMs ?? 120));
+
+  const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+
+  async function waitForElement(selector, label) {
+    const attempts = Math.max(1, Math.ceil(timeoutMs / pollIntervalMs) + 1);
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const element = document.querySelector(selector);
+        if (element) {
+          return { element };
+        }
+      } catch {
+        return {
+          error: `${label} selector is invalid.`
+        };
+      }
+
+      if (attempt < attempts - 1) {
+        await wait(pollIntervalMs);
+      }
+    }
+
+    return {
+      error: `${label} selector was not found before timeout.`
+    };
+  }
 
   function dispatchInputEvents(element) {
     element.dispatchEvent(new EventConstructor("input", { bubbles: true }));
@@ -19,30 +48,33 @@ export async function autoLogin(document, payload) {
     dispatchInputEvents(element);
   }
 
-  const usernameInput = document.querySelector(payload.usernameSelector);
-  if (!usernameInput) {
+  const usernameResult = await waitForElement(payload.usernameSelector, "Username");
+  if (!usernameResult.element) {
     return {
       status: "selector_not_found",
-      message: "Username selector not found."
+      message: usernameResult.error
     };
   }
 
-  const passwordInput = document.querySelector(payload.passwordSelector);
-  if (!passwordInput) {
+  const passwordResult = await waitForElement(payload.passwordSelector, "Password");
+  if (!passwordResult.element) {
     return {
       status: "selector_not_found",
-      message: "Password selector not found."
+      message: passwordResult.error
     };
   }
 
-  const submitButton = document.querySelector(payload.submitSelector);
-  if (!submitButton) {
+  const submitResult = await waitForElement(payload.submitSelector, "Submit");
+  if (!submitResult.element) {
     return {
       status: "selector_not_found",
-      message: "Submit selector not found."
+      message: submitResult.error
     };
   }
 
+  const usernameInput = usernameResult.element;
+  const passwordInput = passwordResult.element;
+  const submitButton = submitResult.element;
   setElementValue(usernameInput, payload.username);
   setElementValue(passwordInput, payload.password);
   submitButton.click();

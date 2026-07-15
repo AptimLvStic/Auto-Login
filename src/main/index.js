@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import { APP_CONFIG } from "./app/appConfig.js";
 import { createDatabase } from "./database.js";
 import { getExcelPreview, parseExcelFile } from "./excel.js";
+import { createLoginScript, toLaunchResult } from "./loginAutomation.js";
 import { createSecurityService } from "./security.js";
 import { DEFAULT_SETTINGS, LOGIN_RESULT, normalizeUrlValue } from "../shared/site.js";
 import { normalizeExternalUrl, normalizeSettings, normalizeSiteIds } from "./securityPolicy.js";
@@ -14,8 +15,7 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
-  safeStorage,
-  shell
+  safeStorage
 } = electron;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +24,7 @@ const __dirname = path.dirname(__filename);
 let mainWindow;
 let database;
 let security;
+const loginWindows = new Set();
 
 function getRendererUrl() {
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -208,14 +209,61 @@ async function importExcel(filePath, mapping) {
   };
 }
 
-async function openUrlsInDefaultBrowser(urls) {
-  const normalizedUrls = urls.map((url) => normalizeExternalUrl(url));
-  if (normalizedUrls.length === 0) {
-    return;
-  }
+function createLoginWindow(siteName) {
+  const loginWindow = new BrowserWindow({
+    width: 1180,
+    height: 820,
+    minWidth: 900,
+    minHeight: 640,
+    show: false,
+    autoHideMenuBar: true,
+    title: `正在登录 · ${siteName}`,
+    backgroundColor: "#f2eadc",
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webSecurity: true
+    }
+  });
 
-  for (const url of normalizedUrls) {
-    await shell.openExternal(url);
+  loginWindows.add(loginWindow);
+  loginWindow.on("closed", () => loginWindows.delete(loginWindow));
+  loginWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  loginWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  loginWindow.webContents.on("will-navigate", (event, url) => {
+    try {
+      normalizeExternalUrl(url);
+    } catch {
+      event.preventDefault();
+    }
+  });
+  loginWindow.webContents.on("will-redirect", (event, url) => {
+    try {
+      normalizeExternalUrl(url);
+    } catch {
+      event.preventDefault();
+    }
+  });
+
+  return loginWindow;
+}
+
+async function withTimeout(promise, timeoutMs, errorCode, errorMessage) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          const error = new Error(errorMessage);
+          error.code = errorCode;
+          reject(error);
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -243,12 +291,60 @@ async function launchLogin(siteId) {
       record
     );
 
-    await openUrlsInDefaultBrowser([record.login_url]);
+    const loginUrl = normalizeExternalUrl(record.login_url);
+    const password = security.decrypt(record.password_encrypted);
+    const loginWindow = createLoginWindow(record.site_name);
+
+    try {
+      await withTimeout(
+        loginWindow.loadURL(loginUrl),
+        20000,
+        "PAGE_LOAD_TIMEOUT",
+        "登录页面加载超时，请检查网络或登录页地址。"
+      );
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.show();
+      }
+
+      const result = await loginWindow.webContents.executeJavaScript(
+        createLoginScript({
+          username: record.username,
+          password,
+          usernameSelector: record.username_selector,
+          passwordSelector: record.password_selector,
+          submitSelector: record.submit_selector,
+          timeoutMs: 12000,
+          pollIntervalMs: 120,
+          submitDelayMs: 350
+        }),
+        true
+      );
+
+      if (result?.status !== LOGIN_RESULT.SUCCESS) {
+        return {
+          status: result?.status ?? LOGIN_RESULT.UNKNOWN_ERROR,
+          message: result?.message ?? "登录页面未能自动完成填写。窗口已保留，可手动继续。"
+        };
+      }
+    } catch (error) {
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.show();
+      }
+      const launchResult = toLaunchResult(error);
+      return {
+        ...launchResult,
+        message:
+          launchResult.status === LOGIN_RESULT.PAGE_LOAD_ERROR
+            ? "登录页面加载失败或超时。窗口已保留，可检查网络、地址或手动继续。"
+            : "自动登录发生异常。窗口已保留，可手动继续。"
+      };
+    }
+
     database.touchSiteLastUsed(siteId);
 
     return {
       status: LOGIN_RESULT.SUCCESS,
-      message: "已使用系统默认浏览器打开登录页。"
+      message: "已在受隔离的登录窗口中填写账号密码并提交。"
     };
   } catch (error) {
     if (error?.code === "VALIDATION_ERROR") {
@@ -281,22 +377,10 @@ async function launchSites(siteIds) {
     ];
   }
 
-  try {
-    const urls = records.map(({ record }) => record.login_url);
-    await openUrlsInDefaultBrowser(urls);
-    records.forEach(({ siteId }) => database.touchSiteLastUsed(siteId));
-    return records.map(({ siteId }) => ({
-      siteId,
-      status: LOGIN_RESULT.SUCCESS,
-      message: "已使用系统默认浏览器打开登录页。"
-    }));
-  } catch (error) {
-    return records.map(({ siteId }) => ({
-      siteId,
-      status: LOGIN_RESULT.UNKNOWN_ERROR,
-      message: error?.message || "批量打开浏览器失败。"
-    }));
-  }
+  return Promise.all(records.map(async ({ siteId }) => ({
+    siteId,
+    ...(await launchLogin(siteId))
+  })));
 }
 
 async function exportSitesToExcel() {

@@ -197,6 +197,13 @@ function SiteEditorDrawer({
 
         {validationMessage ? <p className="error-text drawer-tip">{validationMessage}</p> : null}
 
+        <div className="automation-guide" role="note">
+          <span className="automation-guide-index">01</span>
+          <p>
+            自动登录会在独立安全窗口中填写账号、密码并点击提交。请使用浏览器开发者工具确认三个 Selector 与登录页匹配。
+          </p>
+        </div>
+
         <form
           className="site-form"
           onSubmit={(event) => {
@@ -684,6 +691,15 @@ function SiteList({
         </div>
       </div>
 
+      <div className="automation-brief" role="status">
+        <div className="automation-brief-icon" aria-hidden="true">↗</div>
+        <div>
+          <p>自动填充模式</p>
+          <strong>独立安全登录窗口</strong>
+        </div>
+        <span>填写账号与密码后自动提交；Selector 不匹配时窗口会保留，方便手动处理。</span>
+      </div>
+
       <div className="control-bar soft-card">
         <input
           className="search-input control-search"
@@ -719,7 +735,7 @@ function SiteList({
           disabled={!canOpenCurrentGroup}
           onClick={() => onLaunchBatch(filteredSites.map((site) => site.id), currentGroupLabel)}
         >
-          打开当前分组全部站点
+          自动登录当前分组
         </button>
 
         <button type="button" className="secondary-outline-button" onClick={onExport}>
@@ -734,7 +750,7 @@ function SiteList({
 
       {launchResult ? (
         <div className={`status-banner status-${launchResult.status}`}>
-          <strong>{launchResult.status === "success" ? "success" : "notice"}</strong>
+          <strong>{launchResult.status === "success" ? "自动登录完成" : "需要处理"}</strong>
           <span>{launchResult.message}</span>
         </div>
       ) : null}
@@ -768,7 +784,7 @@ function SiteList({
 
                 <div className="site-overview-actions stacked-actions">
                   <button type="button" className="primary-button wide-button" onClick={() => onLaunch(site.id)}>
-                    🔑 一键登录
+                    自动填充并登录
                   </button>
                 </div>
               </article>
@@ -785,7 +801,7 @@ function SiteList({
                 />
               </label>
               <span>站点名称</span>
-              <span>一键登录</span>
+              <span>自动登录</span>
               <span>账号</span>
               <span>分组</span>
               <span>最近使用</span>
@@ -809,7 +825,7 @@ function SiteList({
 
                 <div>
                   <button type="button" className="primary-button compact-button login-button" onClick={() => onLaunch(site.id)}>
-                    登录
+                    自动登录
                   </button>
                 </div>
 
@@ -894,7 +910,7 @@ function SiteList({
         <div className="batch-action-bar">
           <span>已选择 {selectedCount} 个站点</span>
           <button type="button" className="primary-button" onClick={() => onLaunchBatch(selectedSiteIds, "已选站点")}>
-            批量打开
+            批量自动登录
           </button>
           <select value={batchGroupValue} onChange={(event) => setBatchGroupValue(event.target.value)}>
             <option value="__keep__">选择目标分组</option>
@@ -1328,7 +1344,7 @@ export default function App() {
       setLaunchResult(result);
       await refreshDirectoryData();
     } catch (error) {
-      setLaunchResult({ status: "unknown_error", message: error?.message || "打开登录页失败。" });
+      setLaunchResult({ status: "unknown_error", message: error?.message || "自动登录窗口打开失败。" });
     }
   }
 
@@ -1338,11 +1354,11 @@ export default function App() {
       const successCount = results.filter((item) => item.status === "success").length;
       setLaunchResult({
         status: successCount === results.length ? "success" : "unknown_error",
-        message: `${groupLabel} 已批量打开 ${results.length} 个站点，成功 ${successCount} 个。`
+        message: `${groupLabel} 已发起 ${results.length} 个自动登录，成功 ${successCount} 个。`
       });
       await refreshDirectoryData();
     } catch (error) {
-      setLaunchResult({ status: "unknown_error", message: error?.message || "批量打开站点失败。" });
+      setLaunchResult({ status: "unknown_error", message: error?.message || "批量自动登录失败。" });
     }
   }
 

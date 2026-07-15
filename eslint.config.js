@@ -8,7 +8,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ["src/main/**/*.js", "src/preload/**/*.js", "src/shared/**/*.js", "scripts/**/*.mjs", "tests/**/*.js"],
+    files: ["src/main/**/*.js", "src/preload/**/*.js", "src/shared/**/*.js", "scripts/**/*.mjs", "tests/**/*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

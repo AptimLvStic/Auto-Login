@@ -11,6 +11,7 @@ Auto Login is a Windows desktop application for managing website entries, accoun
 - Manage sites, accounts, passwords, login pages, groups, and notes
 - Import, preview, map, and export site records with Excel
 - Search, paginate, filter by group, and open login pages in batches
+- Wait for forms, fill credentials, and submit in an isolated login window
 - Keep data local; no mandatory cloud service is used
 - Build Windows directory, installer, and portable editions
 
@@ -104,7 +105,7 @@ See [BUILDING.md](BUILDING.md) for supported Node.js versions, restricted-networ
 
 Download the template from the app or import an `.xlsx` file with these required fields: site name, site URL, username, password, username selector, password selector, and submit selector. The UI previews headers and supports field mapping before import.
 
-Only `http` and `https` URLs are accepted.
+Only `http` and `https` URLs are accepted. Selecting **Auto login** opens a separate sandboxed window, waits for the three configured selectors, fills the credentials, and submits the form. The window remains open if selectors do not match or page loading times out so the user can continue manually.
 
 ## Optional Playwright workflow
 
