@@ -1,182 +1,130 @@
 # Auto Login
 
-Auto Login is a Windows desktop app built with Electron, React, Vite, and SQLite for managing website account records and opening login pages in the system default browser.
+[English](README.en.md) · [繁體中文](README.zh-TW.md) · **简体中文**
 
-## Features
+Auto Login 是一款面向 Windows 的本地桌面应用，用于集中管理网站入口、账号、分组与登录页面，并在系统默认浏览器中安全地打开登录页。
 
-- Manage site records with account, password, URL, notes, and grouping data
-- Import and export site data with Excel
-- Organize sites with custom groups and a sidebar group tree
-- Search, paginate, and batch open login pages
-- Add and edit sites manually from the desktop UI
-- Encrypt locally stored passwords
-- Build Windows directory, installer, and portable editions
+> 密码仅存储在本机 SQLite 数据库中，并优先使用操作系统安全存储加密。请勿将真实凭据、数据库或导出的表格提交到仓库。
 
-## Tech Stack
+## 功能
 
-- Electron
-- React
-- Vite
-- SQLite
+- 管理站点、账号、密码、登录页、分组和备注
+- 通过 Excel 导入、预览、字段映射与导出站点数据
+- 搜索、分页、分组筛选和批量打开登录页
+- 本地加密保存密码，不向任何云端服务上传数据
+- 构建 Windows 目录版、安装版和便携版
 
-## Project Structure
+## 架构
 
-- `src/main`: Electron main process, IPC, database, Excel, settings, browser launch
-- `src/preload`: secure renderer bridge
-- `src/renderer`: React UI
-- `src/shared`: shared site rules and helpers
-- `tests`: automated tests
-- `release`: generated Windows build artifacts
-
-## Development
-
-Install dependencies:
-
-```bash
-nvm use 22
-npm install
+```mermaid
+flowchart LR
+  UI[React + Vite 渲染进程] -->|受限 IPC| Main[Electron 主进程]
+  Main --> DB[(本地 SQLite)]
+  Main --> Crypto[Electron safeStorage]
+  Main --> Excel[ExcelJS 导入/导出]
+  Main --> Browser[系统默认浏览器]
 ```
 
-Use Node.js 22 LTS for development and release builds. The CI workflow enforces the same major version.
+## 技术栈
 
-Run in development mode:
+| 层级 | 技术 |
+| --- | --- |
+| 桌面运行时 | Electron 43 |
+| 用户界面 | React 19、Vite 6 |
+| 本地数据 | Node.js SQLite (`node:sqlite`) |
+| Excel | ExcelJS |
+| 质量保障 | ESLint、Node.js Test Runner、GitHub Actions |
 
-```bash
+## 快速开始
+
+### 环境要求
+
+- Windows 10/11 x64
+- Node.js 22 LTS（`>=22 <23`）
+
+```powershell
+git clone https://github.com/AptimLvStic/Auto-Login.git
+cd Auto-Login
+npm ci
 npm run dev
 ```
 
-Run tests:
+应用启动后，本地数据库会自动创建在 Electron 的 `userData` 目录中，而非项目目录。
 
-```bash
-npm test
-```
+## 常用命令
 
-Build the renderer:
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev` | 启动开发模式 |
+| `npm run lint` | 执行代码规范检查 |
+| `npm test` | 运行自动化测试 |
+| `npm run build` | 构建前端资源 |
+| `npm run pack:win:dir` | 生成 Windows 目录版 |
+| `npm run pack:win` | 生成目录版、安装版和便携版 |
 
-```bash
-npm run build
-```
+执行完整的本地质量检查：
 
-Build Windows packages:
-
-```bash
-npm run pack:win
-```
-
-## Playwright Browser Automation
-
-This project now includes a standalone Playwright login workflow runner at `scripts/playwright-login.mjs`.
-It uses the same core fields already stored by the app: `loginUrl`, `username`, `password`, `usernameSelector`, `passwordSelector`, and `submitSelector`.
-
-Install Playwright first:
-
-```bash
-npm install -D playwright
-npx playwright install chromium
-```
-
-Run the included example against the local mock login page:
-
-```bash
-npm run playwright:login:example
-```
-
-Run a real workflow config:
-
-```bash
-npm run playwright:login -- --config path/to/login-workflow.json
-```
-
-Open a visible browser window while debugging:
-
-```bash
-npm run playwright:login -- --config path/to/login-workflow.json --headed
-```
-
-Optional custom artifact directory:
-
-```bash
-npm run playwright:login -- --config path/to/login-workflow.json --output-dir output/playwright/my-run
-```
-
-### Config format
-
-Example config:
-
-```json
-{
-  "browserName": "chromium",
-  "defaultTimeoutMs": 15000,
-  "submitWaitMs": 1500,
-  "postSubmitSelector": ".dashboard",
-  "postSubmitUrlIncludes": "/home",
-  "workflows": [
-    {
-      "name": "crm-portal",
-      "loginUrl": "https://crm.example.com/login",
-      "username": "alice@example.com",
-      "password": "secret123",
-      "usernameSelector": "#username",
-      "passwordSelector": "#password",
-      "submitSelector": "button[type='submit']",
-      "beforeFillWaitForSelector": "#username",
-      "postSubmitSelector": ".welcome-banner",
-      "successMessage": "CRM login submitted successfully."
-    }
-  ]
-}
-```
-
-### Run steps
-
-1. Install Playwright and browser binaries.
-2. Copy `scripts/playwright-login.example.json` and replace the URL, credentials, and selectors with real values.
-3. Add `postSubmitSelector` or `postSubmitUrlIncludes` for stronger success detection when the target site redirects after login.
-4. Run `npm run playwright:login -- --config <your-config>`.
-5. Review `output/playwright/login-results.json` and any success or failure screenshots.
-
-### Reliability notes
-
-- The script validates required fields before launching the browser.
-- It classifies errors into `validation_error`, `selector_not_found`, `page_load_error`, and `unknown_error`.
-- It writes a machine-readable summary file plus screenshots for easier troubleshooting.
-- If a site needs an already-authenticated browser state, add `storageStatePath` to the config and point it at a Playwright storage state JSON file.
-
-## Windows Outputs
-
-After `npm run pack:win`, the main outputs are generated in `release`:
-
-- `win-unpacked/`: directory edition
-- `Auto Login Setup-<version>.exe`: installer edition
-- `Auto Login Portable-<version>.exe`: portable edition
-
-Generated installers are intentionally ignored by Git. Publish them through a version tag (`vX.Y.Z`): GitHub Actions validates lint, tests, build, production dependency audit and secret scanning, then creates a GitHub Release from the Windows artifacts.
-
-## Quality and security checks
-
-```bash
+```powershell
+npm ci
 npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
 ```
 
-- This application has no required environment variables or cloud service configuration.
-- Do not commit real credentials, database files, generated Excel exports, Playwright screenshots, or Windows installers.
-- Passwords are encrypted locally. See [SECURITY.md](SECURITY.md) for the supported threat model and vulnerability reporting process.
-- Before a public Windows release, configure code signing outside the repository with GitHub Secrets; unsigned packages can trigger Windows reputation warnings.
+有关 Node.js 版本、网络受限构建和本地打包说明，请参阅 [BUILDING.md](BUILDING.md)。
 
-## Release checklist
+## Excel 导入
 
-1. Run the quality and security checks above.
-2. Manually verify add, edit, import, export, group move and browser launch flows with non-production credentials.
-3. Back up the local SQLite data directory before upgrading an existing installation.
-4. Update `CHANGELOG.md`, create a `vX.Y.Z` tag, and push the tag.
-5. Confirm the generated GitHub Release assets and retain the prior installer for rollback.
+在应用中下载模板，或使用包含以下必填字段的 `.xlsx` 文件：站点名称、站点地址、账号、密码、账号输入框 Selector、密码输入框 Selector、提交按钮 Selector。导入前可在界面中预览表头并完成字段映射。
 
-For Node.js requirements, Windows package commands and network troubleshooting, see [BUILDING.md](BUILDING.md).
+仅允许 `http` 与 `https` 站点地址；其他协议会被拒绝。
 
-## Notes
+## Playwright 登录工作流（可选）
 
-- The app currently opens login pages in the system default browser.
-- The `release` folder in the repository is different from GitHub's "Releases" section. GitHub Releases must be published separately on GitHub.
+项目提供独立的自动化登录脚本，适用于获得明确授权的测试或内部系统：
+
+```powershell
+npm install -D playwright
+npx playwright install chromium
+npm run playwright:login:example
+```
+
+复制 [scripts/playwright-login.example.json](scripts/playwright-login.example.json)，替换为脱敏的测试凭据与选择器后运行：
+
+```powershell
+npm run playwright:login -- --config path/to/login-workflow.json
+```
+
+请仅对有权访问的系统使用此功能，并妥善保护配置文件和生成的截图。
+
+## 安全说明
+
+- Electron 使用 `contextIsolation`、沙箱和最小化 IPC API。
+- 应用阻止窗口任意跳转、弹窗创建与权限请求，并只允许打开 HTTP/HTTPS 外链。
+- 密码优先由 Electron `safeStorage` 加密；安全存储不可用时会使用兼容性回退方案。该回退方案不用于抵御本机高权限攻击者。
+- 请在公开分发前使用可信 Windows 代码签名证书签名安装包。
+
+漏洞报告与支持范围见 [SECURITY.md](SECURITY.md)。
+
+## CI 与发布
+
+推送到 `main` 或创建 Pull Request 时，GitHub Actions 会执行安装、Lint、测试、构建、依赖高危漏洞审计与密钥扫描。
+
+发布新版本：
+
+```powershell
+# 先更新 package.json 与 CHANGELOG.md
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+标签构建会在 GitHub Windows Runner 上生成安装版和便携版，并自动创建 GitHub Release。当前版本可在 [Releases](https://github.com/AptimLvStic/Auto-Login/releases) 下载。
+
+## 贡献
+
+提交前请运行质量检查，并避免提交 `node_modules`、构建产物、本地数据库、真实凭据、导出表格与截图。详细流程请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 许可证
+
+当前仓库尚未声明开源许可证；在复用、分发或贡献前请先联系维护者确认授权范围。
