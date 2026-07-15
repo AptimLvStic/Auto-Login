@@ -1,6 +1,6 @@
 {
   "name": "auto-login",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Auto Login is a secure orchestration console for high-volume web access workflows.",
   "author": "Codex",
   "private": true,
