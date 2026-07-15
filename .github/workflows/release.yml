@@ -23,9 +23,15 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
-      - uses: gitleaks/gitleaks-action@v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Scan for committed secrets
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod "https://api.github.com/repos/gitleaks/gitleaks/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -match "_windows_x64\.zip$" } | Select-Object -First 1
+          if (-not $asset) { throw "No Windows x64 Gitleaks asset was found." }
+          Invoke-WebRequest $asset.browser_download_url -OutFile gitleaks.zip
+          Expand-Archive gitleaks.zip -DestinationPath gitleaks -Force
+          & .\gitleaks\gitleaks.exe detect --source . --redact --no-banner
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
